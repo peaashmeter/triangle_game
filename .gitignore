@@ -32,7 +32,7 @@
 /build/
 
 # Platform related
-/windows/
+windows/
 
 # Web related
 lib/generated_plugin_registrant.dart

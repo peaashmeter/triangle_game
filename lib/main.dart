@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -143,11 +144,11 @@ class Enemy {
     //TODO: сделать для разных типов фигур
     switch (type) {
       case EnemyType.square:
+        const maxSize = 50;
+        //Начальный размер 50 (100 хп)
+        //Конечный размер 25 (0 хп)
 
-        //Начальный размер 100 (100 хп)
-        //Конечный размер 50 (0 хп)
-
-        var size = 100 - ((100 - hp) / 2);
+        var size = maxSize - ((maxSize - hp) / 2);
 
         //От центральной точки половину вниз, вверх, влево, вправо to make a square
         var path = Path()

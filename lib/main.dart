@@ -21,8 +21,8 @@ class GameWidget extends StatefulWidget {
 class GameWidgetState extends State<GameWidget> {
   late Player player;
   late Stream ticker;
-  late List<Object> enemies;
   late EnemyModel enemyModel;
+  late BulletModel bulletModel;
 
   int tick = 0;
 
@@ -39,6 +39,7 @@ class GameWidgetState extends State<GameWidget> {
     enemyModel = EnemyModel(
       [],
     );
+    bulletModel = BulletModel();
 
     super.initState();
   }
@@ -51,20 +52,24 @@ class GameWidgetState extends State<GameWidget> {
         MediaQuery.of(context).size.height / 2);
     player = Player(center)..rotateToMouse(mousePos);
 
-    if (tick % 60 == 0) {
+    if (tick % 120 == 0) {
       enemyModel.spawnEnemy(width, height);
     }
+    if (tick % 12 == 0) {
+      bulletModel.addBullet(center, player.direction);
+    }
     enemyModel.moveEnemies(center);
+    bulletModel.moveBullets(width, height);
+    bulletModel.checkCollision(enemyModel);
 
     return Container(
-      color: Colors.white,
-      child: MouseRegion(
-        onHover: (event) => mousePos = event.position,
-        child: CustomPaint(
-          painter: GamePainter(player, enemyModel),
-        ),
-      ),
-    );
+        color: Colors.white,
+        child: MouseRegion(
+          onHover: ((event) => mousePos = event.position),
+          child: CustomPaint(
+            painter: GamePainter(player, enemyModel, bulletModel),
+          ),
+        ));
   }
 }
 
@@ -80,6 +85,8 @@ class Player {
   late Point<double> _c;
 
   late List<Path> circlesPaths = [];
+
+  Point<double> get direction => Point(_a.x, _a.y);
 
   Player(this.centerPoint) {
     _a = const Point(30, 0);
@@ -170,12 +177,12 @@ class Enemy {
     position += vec;
   }
 
-  bool checkCollision(Point position) {
+  bool checkCollision(Point pos) {
     //TODO: сделать для других фигур
     var size = 100 - ((100 - hp) / 2);
     var r = Rect.fromCenter(center: position.offset, width: size, height: size);
 
-    return r.contains(position.offset);
+    return r.contains(pos.offset);
   }
 }
 
@@ -185,14 +192,22 @@ class EnemyModel {
 
   EnemyModel(this._enemies);
 
-  void checkCollision(Point position) {
+  bool checkCollision(Bullet b) {
     List<Enemy> disposables = [];
+
     for (var e in _enemies) {
-      if (e.checkCollision(position)) {
-        disposables.add(e);
+      if (e.checkCollision(b.position)) {
+        e.hp -= b.damage.toInt();
+        if (e.hp <= 0) {
+          disposables.add(e);
+          _enemies.removeWhere((e) => disposables.contains(e));
+        }
+
+        return true;
       }
     }
-    _enemies.removeWhere((element) => disposables.contains(element));
+
+    return false;
   }
 
   void moveEnemies(Point<double> center) {
@@ -223,11 +238,49 @@ class EnemyModel {
 
 enum EnemyType { square, pentagon, hexagon }
 
+class BulletModel {
+  final List<Bullet> _bullets = [];
+  UnmodifiableListView<Bullet> get bullets => UnmodifiableListView(_bullets);
+
+  void moveBullets(double width, double height) {
+    List<Bullet> disposables = [];
+    for (var bullet in bullets) {
+      bullet.move();
+      if (bullet.position.x < 0 ||
+          bullet.position.x > width ||
+          bullet.position.y < 0 ||
+          bullet.position.y > height) {
+        disposables.add(bullet);
+      }
+    }
+    //Garbage collection
+    _bullets.removeWhere((b) => disposables.contains(b));
+  }
+
+  void checkCollision(EnemyModel enemyModel) {
+    List<Bullet> dispose = [];
+
+    for (var b in bullets) {
+      if (enemyModel.checkCollision(b)) {
+        dispose.add(b);
+      }
+    }
+
+    _bullets.removeWhere((b) => dispose.contains(b));
+  }
+
+  //TODO: разные типы пуль
+  void addBullet(Point<double> position, Point<double> direction) {
+    _bullets.add(PlainBullet(position, direction));
+  }
+}
+
 class GamePainter extends CustomPainter {
   final Player player;
   final EnemyModel enemyModel;
+  final BulletModel bulletModel;
 
-  GamePainter(this.player, this.enemyModel);
+  GamePainter(this.player, this.enemyModel, this.bulletModel);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -239,8 +292,12 @@ class GamePainter extends CustomPainter {
     for (var enemy in enemyModel.enemies) {
       canvas.drawPath(enemy.getPath(), paint);
     }
+    for (var bullet in bulletModel.bullets) {
+      canvas.drawPath(bullet.path, paint);
+    }
 
     canvas.drawPath(player.getPath(), paint);
+
     for (var i = 0; i < player.circlesPaths.length; i++) {
       var paint = Paint()
         ..color = Color.fromRGBO(0, 0, 0, 1 - 0.1 * i)
@@ -252,4 +309,48 @@ class GamePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+abstract class Bullet {
+  late Point<double> position;
+  late Path impression;
+  late double speed;
+  late Point<double> direction;
+  late double damage;
+
+  Bullet(
+      {required this.position,
+      required this.direction,
+      required this.impression,
+      required this.speed,
+      required this.damage});
+
+  Path get path => impression;
+
+  void move() {}
+}
+
+class PlainBullet extends Bullet {
+  static const plainBulletSpeed = 5.0;
+  static const plainBulletRadius = 5.0;
+  static const plainBulletDamage = 20.0;
+
+  PlainBullet(Point<double> position, Point<double> direction)
+      : super(
+            position: position,
+            direction: direction,
+            speed: plainBulletSpeed,
+            impression: Path()
+              ..addOval(Rect.fromCircle(
+                  center: position.offset, radius: plainBulletRadius)),
+            damage: plainBulletDamage);
+
+  @override
+  void move() {
+    position += direction * (1 / direction.magnitude) * plainBulletSpeed;
+    impression = Path()
+      ..addOval(
+          Rect.fromCircle(center: position.offset, radius: plainBulletRadius));
+    super.move();
+  }
 }

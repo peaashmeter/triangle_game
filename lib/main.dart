@@ -52,10 +52,10 @@ class GameWidgetState extends State<GameWidget> {
         MediaQuery.of(context).size.height / 2);
     player = Player(center)..rotateToMouse(mousePos);
 
-    if (tick % 120 == 0) {
+    if (tick % 300 == 0) {
       enemyModel.spawnEnemy(width, height);
     }
-    if (tick % 12 == 0) {
+    if (tick % 30 == 0) {
       bulletModel.addBullet(center, player.direction);
     }
     enemyModel.moveEnemies(center);
@@ -64,8 +64,9 @@ class GameWidgetState extends State<GameWidget> {
 
     return Container(
         color: Colors.white,
-        child: MouseRegion(
-          onHover: ((event) => mousePos = event.position),
+        child: Listener(
+          onPointerDown: (event) => mousePos = event.position,
+          onPointerMove: (event) => mousePos = event.position,
           child: CustomPaint(
             painter: GamePainter(player, enemyModel, bulletModel),
           ),
@@ -140,12 +141,16 @@ class Player {
 ///Противник, он выглядит как правильный многоугольник, у него есть местоположение и хп. И все.
 class Enemy {
   final EnemyType type;
-  late int hp;
+  late double hp;
   late Point<double> position;
   late double speed;
+  late double visualHp;
 
   Enemy(this.position,
-      {this.type = EnemyType.square, this.hp = 100, this.speed = 10});
+      {this.type = EnemyType.square,
+      this.hp = 100,
+      this.speed = 10,
+      this.visualHp = 100});
 
   Path getPath() {
     //TODO: сделать для разных типов фигур
@@ -155,7 +160,7 @@ class Enemy {
         //Начальный размер 50 (100 хп)
         //Конечный размер 25 (0 хп)
 
-        var size = maxSize - ((maxSize - hp) / 2);
+        var size = maxSize - ((maxSize - visualHp) / 2);
 
         //От центральной точки половину вниз, вверх, влево, вправо to make a square
         var path = Path()
@@ -175,6 +180,14 @@ class Enemy {
     vec *= (1 / vec.magnitude);
 
     position += vec;
+
+    if (visualHp > hp) {
+      visualHp--;
+    }
+  }
+
+  void getDamage(double damage) {
+    hp -= damage;
   }
 
   bool checkCollision(Point pos) {
@@ -197,7 +210,7 @@ class EnemyModel {
 
     for (var e in _enemies) {
       if (e.checkCollision(b.position)) {
-        e.hp -= b.damage.toInt();
+        e.getDamage(b.damage);
         if (e.hp <= 0) {
           disposables.add(e);
           _enemies.removeWhere((e) => disposables.contains(e));
